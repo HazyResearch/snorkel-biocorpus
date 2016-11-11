@@ -1,0 +1,7 @@
+export APPHOME="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && cd .. && pwd )"
+export SNORKELHOME="$APPHOME/snorkel"
+echo "Application home directory: $APPHOME"
+echo "Snorkel home directory: $SNORKELHOME"
+export PYTHONPATH="$PYTHONPATH:$APPHOME:$SNORKELHOME:$SNORKELHOME/treedlib"
+export PATH="$PATH:$SNORKELHOME:$SNORKELHOME/treedlib"
+echo "Environment variables set!"

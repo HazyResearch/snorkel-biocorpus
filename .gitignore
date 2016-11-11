@@ -1,3 +1,5 @@
 *.swp
 *.gz
 data/
+.ipynb_checkpoints
+*.pyc

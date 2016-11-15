@@ -83,8 +83,8 @@ class PubtatorSentenceParser(SentenceParser):
                 # Note: this needs to be re-calculated each time in case we split the sentence!
                 abs_offsets = [co + start for co in sentence_parts['char_offsets']]
 
-                # Check if within range
-                if si >= abs_offsets[0] and si < abs_offsets[-1] and ei > abs_offsets[0] and ei<=abs_offsets[-1]:
+                # Assume if an annotation starts in one sentence, it also ends in that sentence
+                if si >= abs_offsets[0] and si <= abs_offsets[-1]:
                     
                     # Get closest end match; note we assume that the end of the tagged span may be
                     # *shorter* than the end of a token
@@ -136,6 +136,7 @@ class PubtatorSentenceParser(SentenceParser):
         if len(annotations) != len(matched_annos):
             print annotations
             print matched_annos
+            print "\n"
             for i in set(range(len(annotations))).difference(matched_annos):
                 print annotations[i]
             print "\n"

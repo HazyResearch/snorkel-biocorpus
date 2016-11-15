@@ -8,6 +8,17 @@ class PubtatorSentenceParser(SentenceParser):
     def _check_match(self, mention, toks):
         """Check if a string mention matches a list of tokens, without knowledge of token splits"""
         return re.match(r'.{0,2}'.join(re.escape(t) for t in toks), mention) is not None
+    
+    def _throw_error(self, sentence_parts, mention, toks):
+        print sentence_parts
+        print mention
+        print ' '.join(toks)
+        raise ValueError("Couldn't find match!")
+
+    def _mark_matched_annotation(self, wi, we, sentence_parts, cid, cid_type):
+        for j in range(wi, we):
+            sentence_parts['entity_cids'][j]  = cid
+            sentence_parts['entity_types'][j] = cid_type
         
     def parse(self, doc, text, annotations):
         
@@ -42,32 +53,20 @@ class PubtatorSentenceParser(SentenceParser):
 
                     # Handle cases where we exact match the start token
                     if si in abs_offsets:
-                        wi = abs_offsets.index(si)
-                        m = " ".join(sentence_parts['words'][j] for j in range(wi, we))
+                        wi    = abs_offsets.index(si)
+                        words = [sentence_parts['words'][j] for j in range(wi, we)]
 
                         # Full exact match
-                        #if mention == m:
-                        if self._check_match(mention, [sentence_parts['words'][j] for j in range(wi, we)]):
+                        if self._check_match(mention, words):
                             matched_annos.append(i)
-                            print "\t" + mention + ':' + m
-                            for j in range(wi, we):
-                                sentence_parts['entity_cids'][j]  = cid
-                                sentence_parts['entity_types'][j] = cid_type
+                            self._mark_matched_annotation(wi, we, sentence_parts, cid, cid_type)
+                            print "\t" + mention + '  :  ' + ' '.join(words)
 
                         # Truncated ending
                         else:
-                            try:
-                                last_word   = sentence_parts['words'][we-1]
-                                split_pt    = ei - abs_offsets[we-1]
-                                split_token = last_word[split_pt]
-                            except:
-                                print sentence_parts
-                                print mention
-                                print m
-                                print last_word
-                                print split_pt
-                                raise IndexError()
-
+                            last_word   = sentence_parts['words'][we-1]
+                            split_pt    = ei - abs_offsets[we-1]
+                            split_token = last_word[split_pt]
                             if split_token in ['-', '/']:
 
                                 # Split CoreNLP token
@@ -82,10 +81,11 @@ class PubtatorSentenceParser(SentenceParser):
                                         if k in ['words', 'lemmas']:
                                             if token[split_pt] != split_token:
                                                 raise ValueError("Incorrect split of %s" % m)
-                                            sentence_parts[k][we-1] = token[split_pt:]
+                                            sentence_parts[k][we-1] = token[split_pt+1:]
                                             sentence_parts[k].insert(we-1, token[:split_pt])
+
                                         elif k == 'char_offsets':
-                                            sentence_parts[k][we-1] = token + split_pt
+                                            sentence_parts[k][we-1] = token + split_pt + 1
                                             sentence_parts[k].insert(we-1, token)
 
                                         # Otherwise, just duplicate the split token's value
@@ -93,30 +93,22 @@ class PubtatorSentenceParser(SentenceParser):
                                             sentence_parts[k].insert(we-1, token)
 
                                 # Register and confirm match
-                                m = " ".join(sentence_parts['words'][j] for j in range(wi, we))
-                                if mention == m:
+                                words = [sentence_parts['words'][j] for j in range(wi, we)]
+                                if self._check_match(mention, words):
                                     matched_annos.append(i)
-                                    print "\t" + mention + ':' + m
-                                    for j in range(wi, we):
-                                        sentence_parts['entity_cids'][j]  = cid
-                                        sentence_parts['entity_types'][j] = cid_type
+                                    self._mark_matched_annotation(wi, we, sentence_parts, cid, cid_type)
+                                    print "\t" + mention + '  :  ' + ' '.join(words)
                                 else:
-                                    print sentence_parts
-                                    print mention
-                                    print m
-                                    raise ValueError("Couldn't find match!")
+                                    self._throw_error(sentence_parts, mention, words)
                             else:
-                                print sentence_parts
-                                print mention
-                                print m
-                                raise ValueError("Couldn't find match!")
+                                self._throw_error(sentence_parts, mention, words)
 
-                    # Else raise exception
+                    # Handle cases where we don't match the start token
+                    # TODO
+                    
+                    # Else throw error      
                     else:
-                        print sentence_parts
-                        print mention
-                        print m
-                        raise ValueError("Couldn't find match!")
+                        self._throw_error(sentence_parts, mention, words)
             yield Sentence(**sentence_parts)
 
         # Check if we got everything

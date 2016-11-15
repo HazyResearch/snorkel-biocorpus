@@ -19,7 +19,42 @@ class PubtatorSentenceParser(SentenceParser):
         for j in range(wi, we):
             sentence_parts['entity_cids'][j]  = cid
             sentence_parts['entity_types'][j] = cid_type
-        
+    
+    def _split_token(self, sentence_parts, abs_offsets, tok_idx, char_idx, mention, toks):
+        """
+        Split a token, splitting the rest of the CoreNLP parse appropriately as well
+        Note that this may not result in a correct pos tag split, and dep tree will no longer be a tree...
+        """
+        split_word = sentence_parts['words'][tok_idx]
+        split_pt   = char_idx - abs_offsets[tok_idx]
+        split_char = split_word[split_pt]
+        if split_char in ['-', '/']:
+
+            # Split CoreNLP token
+            N = len(sentence_parts['words'])
+            for k, v in sentence_parts.iteritems():
+                if isinstance(v, list) and len(v) == N:
+                    token = v[tok_idx]
+
+                    # If words or lemmas, split the word/lemma
+                    # Note that we're assuming (anc checking) that lemmatization does not
+                    # affect the split point
+                    if k in ['words', 'lemmas']:
+                        if token[split_pt] != split_char:
+                            raise ValueError("Incorrect split of %s" % split_word)
+                        sentence_parts[k][tok_idx] = token[split_pt+1:]
+                        sentence_parts[k].insert(tok_idx, token[:split_pt])
+
+                    elif k == 'char_offsets':
+                        sentence_parts[k][tok_idx] = token + split_pt + 1
+                        sentence_parts[k].insert(tok_idx, token)
+
+                    # Otherwise, just duplicate the split token's value
+                    else:
+                        sentence_parts[k].insert(tok_idx, token)
+        else:
+            self._throw_error(sentence_parts, mention, toks)
+
     def parse(self, doc, text, annotations):
         
         # Track how many annotations are correctly matches
@@ -64,42 +99,14 @@ class PubtatorSentenceParser(SentenceParser):
 
                         # Truncated ending
                         else:
-                            last_word   = sentence_parts['words'][we-1]
-                            split_pt    = ei - abs_offsets[we-1]
-                            split_token = last_word[split_pt]
-                            if split_token in ['-', '/']:
+                            self._split_token(sentence_parts, abs_offsets, we-1, ei, mention, words)
 
-                                # Split CoreNLP token
-                                N = len(sentence_parts['words'])
-                                for k, v in sentence_parts.iteritems():
-                                    if isinstance(v, list) and len(v) == N:
-                                        token = v[we-1]
-
-                                        # If words or lemmas, split the word/lemma
-                                        # Note that we're assuming (anc checking) that lemmatization does not
-                                        # affect the split point
-                                        if k in ['words', 'lemmas']:
-                                            if token[split_pt] != split_token:
-                                                raise ValueError("Incorrect split of %s" % m)
-                                            sentence_parts[k][we-1] = token[split_pt+1:]
-                                            sentence_parts[k].insert(we-1, token[:split_pt])
-
-                                        elif k == 'char_offsets':
-                                            sentence_parts[k][we-1] = token + split_pt + 1
-                                            sentence_parts[k].insert(we-1, token)
-
-                                        # Otherwise, just duplicate the split token's value
-                                        else:
-                                            sentence_parts[k].insert(we-1, token)
-
-                                # Register and confirm match
-                                words = [sentence_parts['words'][j] for j in range(wi, we)]
-                                if self._check_match(mention, words):
-                                    matched_annos.append(i)
-                                    self._mark_matched_annotation(wi, we, sentence_parts, cid, cid_type)
-                                    print "\t" + mention + '  :  ' + ' '.join(words)
-                                else:
-                                    self._throw_error(sentence_parts, mention, words)
+                            # Register and confirm match
+                            words = [sentence_parts['words'][j] for j in range(wi, we)]
+                            if self._check_match(mention, words):
+                                matched_annos.append(i)
+                                self._mark_matched_annotation(wi, we, sentence_parts, cid, cid_type)
+                                print "\t" + mention + '  :  ' + ' '.join(words)
                             else:
                                 self._throw_error(sentence_parts, mention, words)
 

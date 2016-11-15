@@ -5,9 +5,10 @@ import re
 
 class PubtatorSentenceParser(SentenceParser):
     """Subs in Pubtator annotations in the NER_tags array"""
+
     def _check_match(self, mention, toks):
         """Check if a string mention matches a list of tokens, without knowledge of token splits"""
-        return re.match(r'.{0,2}'.join(re.escape(t) for t in toks), mention) is not None
+        return re.match(r'[\s\t\-\/\.]*'.join(re.escape(t) for t in toks), mention) is not None
     
     def _throw_error(self, sentence_parts, mention, toks, msg="Couldn't find match!"):
         print sentence_parts
@@ -17,8 +18,14 @@ class PubtatorSentenceParser(SentenceParser):
 
     def _mark_matched_annotation(self, wi, we, sentence_parts, cid, cid_type):
         for j in range(wi, we):
-            sentence_parts['entity_cids'][j]  = cid
-            sentence_parts['entity_types'][j] = cid_type
+            if sentence_parts['entity_cids'][j] is None:
+                sentence_parts['entity_cids'][j]  = cid
+                sentence_parts['entity_types'][j] = cid_type
+            
+            # Pipe-concatenate multiple labels!
+            else:
+                sentence_parts['entity_cids'][j]  += "|" + cid
+                sentence_parts['entity_types'][j] += "|" + cid_type
     
     def _split_token(self, sentence_parts, abs_offsets, tok_idx, char_idx, mention, toks):
         """
@@ -34,33 +41,32 @@ class PubtatorSentenceParser(SentenceParser):
             print split_pt
             self._throw_error(sentence_parts, mention, toks)
 
-        if split_char in ['-', '/', '.']:
+        # Log non-standard split characters...
+        if split_char not in ['-', '/', '.']:
+            print "Warning: Non-standard split: mention '%s', split on '%s' in word '%s'" % (mention, split_char, split_word)
 
-            # Split CoreNLP token
-            N = len(sentence_parts['words'])
-            for k, v in sentence_parts.iteritems():
-                if isinstance(v, list) and len(v) == N:
-                    token = v[tok_idx]
+        # Split CoreNLP token
+        N = len(sentence_parts['words'])
+        for k, v in sentence_parts.iteritems():
+            if isinstance(v, list) and len(v) == N:
+                token = v[tok_idx]
 
-                    # If words or lemmas, split the word/lemma
-                    # Note that we're assuming (anc checking) that lemmatization does not
-                    # affect the split point
-                    if k in ['words', 'lemmas']:
-                        if token[split_pt] != split_char:
-                            raise ValueError("Incorrect split of %s" % split_word)
-                        sentence_parts[k][tok_idx] = token[split_pt+1:]
-                        sentence_parts[k].insert(tok_idx, token[:split_pt])
+                # If words or lemmas, split the word/lemma
+                # Note that we're assuming (anc checking) that lemmatization does not
+                # affect the split point
+                if k in ['words', 'lemmas']:
+                    if token[split_pt] != split_char:
+                        raise ValueError("Incorrect split of %s" % split_word)
+                    sentence_parts[k][tok_idx] = token[split_pt+1:]
+                    sentence_parts[k].insert(tok_idx, token[:split_pt])
 
-                    elif k == 'char_offsets':
-                        sentence_parts[k][tok_idx] = token + split_pt + 1
-                        sentence_parts[k].insert(tok_idx, token)
+                elif k == 'char_offsets':
+                    sentence_parts[k][tok_idx] = token + split_pt + 1
+                    sentence_parts[k].insert(tok_idx, token)
 
-                    # Otherwise, just duplicate the split token's value
-                    else:
-                        sentence_parts[k].insert(tok_idx, token)
-        else:
-            print "SPLIT CHAR:", split_char
-            self._throw_error(sentence_parts, mention, toks)
+                # Otherwise, just duplicate the split token's value
+                else:
+                    sentence_parts[k].insert(tok_idx, token)
 
     def parse(self, doc, text, annotations):
         
@@ -164,6 +170,7 @@ class PubtatorCorpusParser(object):
                 l += 1
 
                 # Entries are separated by a blank line
+                # NOTE: This assumes that the document ends with a single newline!
                 if len(line.rstrip()) == 0:
                     doc = Document(name=doc_id, stable_id=stable_id)
                     corpus.append(doc)
@@ -182,18 +189,18 @@ class PubtatorCorpusParser(object):
 
                 # Second line is the abstract
                 # Assume these are newline-separated; is this true?
+                # Note: some articles do not have abstracts, however they still have this line
                 elif l == 1:
                     split = re.split(r'\|', line.rstrip(), maxsplit=2)
                     text += '\n' + split[2]
 
                 # Rest of the lines are annotations
                 else:
-                    annos.append(line.rstrip('\n').rstrip('\r').split('\t'))
-
-        doc = Document(name=doc_id, stable_id=stable_id)
-        corpus.append(doc)
-        for _ in self.sent_parser.parse(doc, text, annos):
-            pass
+                    anno = line.rstrip('\n').rstrip('\r').split('\t')
+                    if anno[3] == 'NO ABSTRACT':
+                        continue
+                    else:
+                        annos.append(anno)
 
         session.commit()
         return corpus

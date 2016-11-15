@@ -5,24 +5,127 @@ import re
 
 class PubtatorSentenceParser(SentenceParser):
     """Subs in Pubtator annotations in the NER_tags array"""
+    def _check_match(self, mention, toks):
+        """Check if a string mention matches a list of tokens, without knowledge of token splits"""
+        return re.match(r'.{0,2}'.join(re.escape(t) for t in toks), mention) is not None
+        
     def parse(self, doc, text, annotations):
-        for parts in self.corenlp_handler.parse(doc, text):
+        
+        # Track how many annotations are correctly matches
+        matched_annos = []
 
-            # Get absolute char offsets, i.e. relative to document start
-            _, _, start, end  = split_stable_id(doc.stable_id)
-            abs_char_offsets = [co + start for co in parts['char_offsets']]
+        # Parse the document, iterating over dictionary-form Sentences
+        for sentence_parts in self.corenlp_handler.parse(doc, text):
+            _, _, start, end  = split_stable_id(sentence_parts['stable_id'])
+            print sentence_parts['stable_id']
 
             # Try to match with annotations
-            for _, s, e, mention, cid_type, cid in annotations:
-                
-                # Tag format: e.g. "Disease:MESH:D000013"
-                tag = "%s:%s" % (cid_type, cid)
+            # If we don't get a start / end match, AND there is a split character between, we split the
+            # token and *modify the CoreNLP parse* here!
+            for i, anno in enumerate(annotations):
+                _, s, e, mention, cid_type, cid = anno
+                si = int(s)
+                ei = int(e)
 
-                # Sub in for the ner_tag
-                wi  = abs_char_offsets.index(int(s))
-                while wi < len(abs_char_offsets) and abs_char_offsets[we] <= int(e):
-                    parts['ner_tags'][wi] = tag
-            yield Sentence(**parts)
+                # Get absolute char offsets, i.e. relative to document start
+                # Note: this needs to be re-calculated each time in case we split the sentence!
+                abs_offsets = [co + start for co in sentence_parts['char_offsets']]
+
+                # Check if within range
+                if si >= abs_offsets[0] and si < abs_offsets[-1] and ei > abs_offsets[0] and ei<=abs_offsets[-1]:
+                    
+                    # Get closest end match; note we assume that the end of the tagged span may be
+                    # *shorter* than the end of a token
+                    we = 0
+                    while we < len(abs_offsets) and abs_offsets[we] < ei:
+                        we += 1
+
+                    # Handle cases where we exact match the start token
+                    if si in abs_offsets:
+                        wi = abs_offsets.index(si)
+                        m = " ".join(sentence_parts['words'][j] for j in range(wi, we))
+
+                        # Full exact match
+                        #if mention == m:
+                        if self._check_match(mention, [sentence_parts['words'][j] for j in range(wi, we)]):
+                            matched_annos.append(i)
+                            print "\t" + mention + ':' + m
+                            for j in range(wi, we):
+                                sentence_parts['entity_cids'][j]  = cid
+                                sentence_parts['entity_types'][j] = cid_type
+
+                        # Truncated ending
+                        else:
+                            try:
+                                last_word   = sentence_parts['words'][we-1]
+                                split_pt    = ei - abs_offsets[we-1]
+                                split_token = last_word[split_pt]
+                            except:
+                                print sentence_parts
+                                print mention
+                                print m
+                                print last_word
+                                print split_pt
+                                raise IndexError()
+
+                            if split_token in ['-', '/']:
+
+                                # Split CoreNLP token
+                                N = len(sentence_parts['words'])
+                                for k, v in sentence_parts.iteritems():
+                                    if isinstance(v, list) and len(v) == N:
+                                        token = v[we-1]
+
+                                        # If words or lemmas, split the word/lemma
+                                        # Note that we're assuming (anc checking) that lemmatization does not
+                                        # affect the split point
+                                        if k in ['words', 'lemmas']:
+                                            if token[split_pt] != split_token:
+                                                raise ValueError("Incorrect split of %s" % m)
+                                            sentence_parts[k][we-1] = token[split_pt:]
+                                            sentence_parts[k].insert(we-1, token[:split_pt])
+                                        elif k == 'char_offsets':
+                                            sentence_parts[k][we-1] = token + split_pt
+                                            sentence_parts[k].insert(we-1, token)
+
+                                        # Otherwise, just duplicate the split token's value
+                                        else:
+                                            sentence_parts[k].insert(we-1, token)
+
+                                # Register and confirm match
+                                m = " ".join(sentence_parts['words'][j] for j in range(wi, we))
+                                if mention == m:
+                                    matched_annos.append(i)
+                                    print "\t" + mention + ':' + m
+                                    for j in range(wi, we):
+                                        sentence_parts['entity_cids'][j]  = cid
+                                        sentence_parts['entity_types'][j] = cid_type
+                                else:
+                                    print sentence_parts
+                                    print mention
+                                    print m
+                                    raise ValueError("Couldn't find match!")
+                            else:
+                                print sentence_parts
+                                print mention
+                                print m
+                                raise ValueError("Couldn't find match!")
+
+                    # Else raise exception
+                    else:
+                        print sentence_parts
+                        print mention
+                        print m
+                        raise ValueError("Couldn't find match!")
+            yield Sentence(**sentence_parts)
+
+        # Check if we got everything
+        if len(annotations) != len(matched_annos):
+            print annotations
+            print matched_annos
+            for i in set(range(len(annotations))).difference(matched_annos):
+                print annotations[i]
+            raise ValueError("Annotations missed!")
 
 
 class PubtatorCorpusParser(object):
@@ -46,7 +149,7 @@ class PubtatorCorpusParser(object):
                 l += 1
 
                 # Entries are separated by a blank line
-                if len(line.rstrip('\n')) == 0:
+                if len(line.rstrip()) == 0:
                     doc = Document(name=doc_id, stable_id=stable_id)
                     corpus.append(doc)
                     for _ in self.sent_parser.parse(doc, text, annos):
@@ -70,7 +173,7 @@ class PubtatorCorpusParser(object):
 
                 # Rest of the lines are annotations
                 else:
-                    annos.append(line.split('\t'))
+                    annos.append(line.rstrip('\n').rstrip('\r').split('\t'))
 
         doc = Document(name=doc_id, stable_id=stable_id)
         corpus.append(doc)

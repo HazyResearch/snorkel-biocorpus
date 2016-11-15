@@ -9,11 +9,11 @@ class PubtatorSentenceParser(SentenceParser):
         """Check if a string mention matches a list of tokens, without knowledge of token splits"""
         return re.match(r'.{0,2}'.join(re.escape(t) for t in toks), mention) is not None
     
-    def _throw_error(self, sentence_parts, mention, toks):
+    def _throw_error(self, sentence_parts, mention, toks, msg="Couldn't find match!"):
         print sentence_parts
         print mention
         print ' '.join(toks)
-        raise ValueError("Couldn't find match!")
+        raise ValueError(msg)
 
     def _mark_matched_annotation(self, wi, we, sentence_parts, cid, cid_type):
         for j in range(wi, we):
@@ -25,10 +25,16 @@ class PubtatorSentenceParser(SentenceParser):
         Split a token, splitting the rest of the CoreNLP parse appropriately as well
         Note that this may not result in a correct pos tag split, and dep tree will no longer be a tree...
         """
-        split_word = sentence_parts['words'][tok_idx]
-        split_pt   = char_idx - abs_offsets[tok_idx]
-        split_char = split_word[split_pt]
-        if split_char in ['-', '/']:
+        try:
+            split_word = sentence_parts['words'][tok_idx]
+            split_pt   = char_idx - abs_offsets[tok_idx]
+            split_char = split_word[split_pt]
+        except IndexError:
+            print split_word
+            print split_pt
+            self._throw_error(sentence_parts, mention, toks)
+
+        if split_char in ['-', '/', '.']:
 
             # Split CoreNLP token
             N = len(sentence_parts['words'])
@@ -53,6 +59,7 @@ class PubtatorSentenceParser(SentenceParser):
                     else:
                         sentence_parts[k].insert(tok_idx, token)
         else:
+            print "SPLIT CHAR:", split_char
             self._throw_error(sentence_parts, mention, toks)
 
     def parse(self, doc, text, annotations):
@@ -63,7 +70,6 @@ class PubtatorSentenceParser(SentenceParser):
         # Parse the document, iterating over dictionary-form Sentences
         for sentence_parts in self.corenlp_handler.parse(doc, text):
             _, _, start, end  = split_stable_id(sentence_parts['stable_id'])
-            print sentence_parts['stable_id']
 
             # Try to match with annotations
             # If we don't get a start / end match, AND there is a split character between, we split the
@@ -95,7 +101,6 @@ class PubtatorSentenceParser(SentenceParser):
                         if self._check_match(mention, words):
                             matched_annos.append(i)
                             self._mark_matched_annotation(wi, we, sentence_parts, cid, cid_type)
-                            print "\t" + mention + '  :  ' + ' '.join(words)
 
                         # Truncated ending
                         else:
@@ -106,16 +111,25 @@ class PubtatorSentenceParser(SentenceParser):
                             if self._check_match(mention, words):
                                 matched_annos.append(i)
                                 self._mark_matched_annotation(wi, we, sentence_parts, cid, cid_type)
-                                print "\t" + mention + '  :  ' + ' '.join(words)
                             else:
                                 self._throw_error(sentence_parts, mention, words)
 
                     # Handle cases where we don't match the start token
-                    # TODO
-                    
-                    # Else throw error      
                     else:
-                        self._throw_error(sentence_parts, mention, words)
+                        wi = 0
+                        while wi < len(abs_offsets) and abs_offsets[wi+1] < si:
+                            wi += 1
+                        words = [sentence_parts['words'][j] for j in range(wi, we)]
+                        self._split_token(sentence_parts, abs_offsets, wi, si-1, mention, words)
+
+                        # Register and confirm match
+                        wi   += 1
+                        words = [sentence_parts['words'][j] for j in range(wi, we)]
+                        if self._check_match(mention, words):
+                            matched_annos.append(i)
+                            self._mark_matched_annotation(wi, we, sentence_parts, cid, cid_type)
+                        else:
+                            self._throw_error(sentence_parts, mention, words)
             yield Sentence(**sentence_parts)
 
         # Check if we got everything
@@ -124,7 +138,8 @@ class PubtatorSentenceParser(SentenceParser):
             print matched_annos
             for i in set(range(len(annotations))).difference(matched_annos):
                 print annotations[i]
-            raise ValueError("Annotations missed!")
+            print "\n"
+            self._throw_error(sentence_parts, mention, words, msg="Annotations missed!")
 
 
 class PubtatorCorpusParser(object):

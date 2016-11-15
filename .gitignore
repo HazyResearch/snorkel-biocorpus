@@ -3,3 +3,6 @@
 data/
 .ipynb_checkpoints
 *.pyc
+
+pubtator_api/input/
+pubtator_api/output/

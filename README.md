@@ -29,3 +29,11 @@ ftp ftp.ncbi.nlm.nih.gov
 
 gunzip -k bioconcepts2pubtator_offsets.gz
 ```
+
+## API Access
+To get only specific PubTator annotations, simple API access is supported using PubTator-provided scripts; run:
+```
+cd pubtator_api
+python RESTful.client.post.py -i input/pmids.txt -t tmChem > output/pubtator_data
+```
+Where `pmids.txt` is a newline-separated list of pubmed IDs, and the `-t` flag accepts `tmChem|tmVar|DNorm|GNormPlus`.

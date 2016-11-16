@@ -6,9 +6,14 @@ import re
 class PubtatorSentenceParser(SentenceParser):
     """Subs in Pubtator annotations in the NER_tags array"""
 
+    def _scrub(self, mention):
+        m = re.sub(r'\'\'', '"', mention)
+        m = re.sub(r'`',"'", m)
+        return m
+
     def _check_match(self, mention, toks):
         """Check if a string mention matches a list of tokens, without knowledge of token splits"""
-        return re.match(r'[\s\t\-\/\.]*'.join(re.escape(t) for t in toks), mention) is not None
+        return re.match(r'[\s\t\-\/\.]*'.join(re.escape(self._scrub(t)) for t in toks), self._scrub(mention)) is not None
     
     def _throw_error(self, sentence_parts, mention, toks, msg="Couldn't find match!"):
         print sentence_parts
@@ -42,7 +47,7 @@ class PubtatorSentenceParser(SentenceParser):
             self._throw_error(sentence_parts, mention, toks)
 
         # Log non-standard split characters...
-        if split_char not in ['-', '/', '.']:
+        if split_char not in ['-', '_', '/', ',', '.', ':']:
             print "Warning: Non-standard split: mention '%s', split on '%s' in word '%s'" % (mention, split_char, split_word)
 
         # Split CoreNLP token
@@ -55,7 +60,7 @@ class PubtatorSentenceParser(SentenceParser):
                 # Note that we're assuming (anc checking) that lemmatization does not
                 # affect the split point
                 if k in ['words', 'lemmas']:
-                    if token[split_pt] != split_char:
+                    if token[split_pt].lower() != split_char.lower():
                         raise ValueError("Incorrect split of %s" % split_word)
                     sentence_parts[k][tok_idx] = token[split_pt+1:]
                     sentence_parts[k].insert(tok_idx, token[:split_pt])
@@ -164,18 +169,22 @@ class PubtatorCorpusParser(object):
         session.add(corpus)
 
         # Parse the Pubtator file
+        doc_id = None
         with open(self.fp, 'rb') as f:
             l = -1
             for line in f:
                 l += 1
 
                 # Entries are separated by a blank line
-                # NOTE: This assumes that the document ends with a single newline!
                 if len(line.rstrip()) == 0:
-                    doc = Document(name=doc_id, stable_id=stable_id)
-                    corpus.append(doc)
-                    for _ in self.sent_parser.parse(doc, text, annos):
-                        pass
+
+                    # Don't save multiple times if multiple blank lines
+                    if doc_id is not None:
+                        doc = Document(name=doc_id, stable_id=stable_id)
+                        corpus.append(doc)
+                        for _ in self.sent_parser.parse(doc, text, annos):
+                            pass
+                        doc_id = None
                     l = -1
                     continue
 
@@ -200,6 +209,11 @@ class PubtatorCorpusParser(object):
                     if anno[3] == 'NO ABSTRACT':
                         continue
                     else:
+                       
+                        # Handle cases where no CID is provided...
+                        if len(anno) == 5:
+                            anno.append("")
+
                         annos.append(anno)
 
         session.commit()

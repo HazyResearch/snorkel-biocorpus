@@ -31,9 +31,11 @@ gunzip -k bioconcepts2pubtator_offsets.gz
 ```
 
 ## API Access
-To get only specific PubTator annotations, simple API access is supported using PubTator-provided scripts; run:
+To get annotations for specific PubMed abstracts, by PMID, simple API access is supported by the NCBI (see [here](https://www.ncbi.nlm.nih.gov/CBBresearch/Lu/Demo/tmTools/#RESTfulIntroduction)):
 ```
 cd pubtator_api
-python RESTful.client.post.py -i input/pmids.txt -t tmChem > output/pubtator_data
+python RESTful.client.get.py -i input/pmids.txt -b BioConcept -f PubTator > output/pubtator_data
 ```
-Where `pmids.txt` is a newline-separated list of pubmed IDs, and the `-t` flag accepts `tmChem|tmVar|DNorm|GNormPlus`.
+Where `pmids.txt` is a newline-separated list of pubmed IDs and `pubtator_data` is the destination output file.
+
+_Note: this also supports POST API requests for processing of provided text data; but there are probably limits on abusing this..._

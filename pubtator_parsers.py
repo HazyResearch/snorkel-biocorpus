@@ -159,7 +159,8 @@ class PubtatorSentenceParser(SentenceParser):
 
 
 class PubtatorDocParser(UDF):
-    def __init__(self):
+    def __init__(self, x_queue=None, y_set=None):
+        UDF.__init__(self, x_queue, y_set)
         self.sent_parser = PubtatorSentenceParser()
 
     def apply(self, lines):
@@ -199,7 +200,7 @@ class PubtatorDocParser(UDF):
             pass
 
         # Return the doc
-        return doc
+        yield doc
 
 
 def pubtator_doc_generator(fp):

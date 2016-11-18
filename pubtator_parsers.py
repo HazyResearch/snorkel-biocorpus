@@ -3,6 +3,9 @@ from snorkel.models import Corpus, Sentence, Document, split_stable_id
 import re
 
 
+ENTITY_SEP = '~@~'
+
+
 class PubtatorSentenceParser(SentenceParser):
     """Subs in Pubtator annotations in the NER_tags array"""
 
@@ -29,8 +32,8 @@ class PubtatorSentenceParser(SentenceParser):
             
             # Pipe-concatenate multiple labels!
             else:
-                sentence_parts['entity_cids'][j]  += "|" + cid
-                sentence_parts['entity_types'][j] += "|" + cid_type
+                sentence_parts['entity_cids'][j]  += ENTITY_SEP + cid
+                sentence_parts['entity_types'][j] += ENTITY_SEP + cid_type
     
     def _split_token(self, sentence_parts, abs_offsets, tok_idx, char_idx, mention, toks):
         """

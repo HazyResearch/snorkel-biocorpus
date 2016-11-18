@@ -1,5 +1,6 @@
 from snorkel.parser import SentenceParser, DocParser
 from snorkel.models import Corpus, Sentence, Document, split_stable_id
+from snorkel.udf import UDF
 import re
 
 
@@ -157,67 +158,57 @@ class PubtatorSentenceParser(SentenceParser):
             self._throw_error(sentence_parts, mention, words, msg="Annotations missed!")
 
 
-class PubtatorCorpusParser(object):
-    """
-    See: https://www.ncbi.nlm.nih.gov/CBBresearch/Lu/Demo/PubTator/tutorial/index.html#ExportannotationinPubTator
-    """
-    def __init__(self, fp):
-        self.fp          = fp
+class PubtatorDocParser(UDF):
+    def __init__(self):
         self.sent_parser = PubtatorSentenceParser()
+
+    def apply(self, lines):
         
-    def parse_corpus(self, session, name):
-        
-        # Create new Corpus
-        corpus = Corpus(name=name)
-        session.add(corpus)
+        # Here, lines are the lines of a PubTator-format file corresponding to on one document
+        # + its annotations
 
-        # Parse the Pubtator file
-        doc_id = None
-        with open(self.fp, 'rb') as f:
-            l = -1
-            for line in f:
-                l += 1
+        # First line is the title
+        split     = re.split(r'\|', lines[0].rstrip(), maxsplit=2)
+        doc_id    = int(split[0])
+        stable_id = "%s::document:0:0" % doc_id
+        text      = split[2]
 
-                # Entries are separated by a blank line
-                if len(line.rstrip()) == 0:
+        # Second line is the abstract
+        # Assume these are newline-separated; is this true?
+        # Note: some articles do not have abstracts, however they still have this line
+        text += '\n' + re.split(r'\|', lines[1].rstrip(), maxsplit=2)[2]
 
-                    # Don't save multiple times if multiple blank lines
-                    if doc_id is not None:
-                        doc = Document(name=doc_id, stable_id=stable_id)
-                        corpus.append(doc)
-                        for _ in self.sent_parser.parse(doc, text, annos):
-                            pass
-                        doc_id = None
-                    l = -1
-                    continue
+        # Rest of the lines are annotations
+        annos = []
+        for line in lines[2:]:
+            anno = line.rstrip('\n').rstrip('\r').split('\t')
+            if anno[3] == 'NO ABSTRACT':
+                continue
 
-                # First line is the title
-                if l == 0:
-                    split     = re.split(r'\|', line.rstrip(), maxsplit=2)
-                    doc_id    = int(split[0])
-                    stable_id = "%s::document:0:0" % doc_id
-                    text      = split[2]
-                    annos     = []
+            # Handle cases where no CID is provided...
+            else:
+                if len(anno) == 5:
+                    anno.append("")
+                annos.append(anno)
 
-                # Second line is the abstract
-                # Assume these are newline-separated; is this true?
-                # Note: some articles do not have abstracts, however they still have this line
-                elif l == 1:
-                    split = re.split(r'\|', line.rstrip(), maxsplit=2)
-                    text += '\n' + split[2]
+        # Form a Document
+        doc = Document(name=doc_id, stable_id=stable_id)
 
-                # Rest of the lines are annotations
-                else:
-                    anno = line.rstrip('\n').rstrip('\r').split('\t')
-                    if anno[3] == 'NO ABSTRACT':
-                        continue
-                    else:
-                       
-                        # Handle cases where no CID is provided...
-                        if len(anno) == 5:
-                            anno.append("")
+        # Parse the sentences
+        for _ in self.sent_parser.parse(doc, text, annos):
+            pass
 
-                        annos.append(anno)
+        # Return the doc
+        return doc
 
-        session.commit()
-        return corpus
+
+def pubtator_doc_generator(fp):
+    with open(fp, 'rb') as f: 
+        lines = []
+        for line in f:
+            if len(line.rstrip()) == 0:
+                if len(lines) > 0:
+                    yield lines
+                    lines = []
+            else:
+                lines.append(line)

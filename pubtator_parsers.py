@@ -4,22 +4,23 @@ from snorkel.udf import UDF
 import re
 
 
-ENTITY_SEP = '~@~'
-
+ENTITY_SEP     = '~@~'
+STD_SPLITS_RGX = r'[\s\t\-\/\.]*'
 
 class PubtatorSentenceParser(SentenceParser):
     """Subs in Pubtator annotations in the NER_tags array"""
 
     def _scrub(self, mention):
-        m = re.sub(r'\'\'', '"', mention)
+        m = re.sub(r'\'\'|``', '"', mention)
         m = re.sub(r'`',"'", m)
         return m
 
     def _check_match(self, mention, toks):
         """Check if a string mention matches a list of tokens, without knowledge of token splits"""
-        return re.match(r'[\s\t\-\/\.]*'.join(re.escape(self._scrub(t)) for t in toks), self._scrub(mention)) is not None
+        return re.match(STD_SPLITS_RGX.join(re.escape(self._scrub(t)) for t in toks) + r'$', self._scrub(mention)) is not None
     
     def _throw_error(self, sentence_parts, mention, toks, msg="Couldn't find match!"):
+        print "\n"
         print sentence_parts
         print mention
         print ' '.join(toks)
@@ -36,23 +37,26 @@ class PubtatorSentenceParser(SentenceParser):
                 sentence_parts['entity_cids'][j]  += ENTITY_SEP + cid
                 sentence_parts['entity_types'][j] += ENTITY_SEP + cid_type
     
-    def _split_token(self, sentence_parts, abs_offsets, tok_idx, char_idx, mention, toks):
+    def _split_token(self, sentence_parts, abs_offsets, tok_idx, char_idx, mention, toks, left_tok=True):
         """
         Split a token, splitting the rest of the CoreNLP parse appropriately as well
         Note that this may not result in a correct pos tag split, and dep tree will no longer be a tree...
+        If target_left=True, then do not include the split character with the left split; vice versa for False
         """
         try:
             split_word = sentence_parts['words'][tok_idx]
             split_pt   = char_idx - abs_offsets[tok_idx]
             split_char = split_word[split_pt]
         except IndexError:
+            print "\r"
             print split_word
             print split_pt
             self._throw_error(sentence_parts, mention, toks)
 
-        # Log non-standard split characters...
-        if split_char not in ['-', '_', '/', ',', '.', ':']:
-            print "Warning: Non-standard split: mention '%s', split on '%s' in word '%s'" % (mention, split_char, split_word)
+        # Decide whether to preserve split or not...
+        keep_split = re.match(STD_SPLITS_RGX + r'$', split_char) is None
+        lsplit_pt  = split_pt if not keep_split or left_tok else split_pt + 1
+        rsplit_pt  = split_pt if keep_split and left_tok else split_pt + 1
 
         # Split CoreNLP token
         N = len(sentence_parts['words'])
@@ -66,11 +70,11 @@ class PubtatorSentenceParser(SentenceParser):
                 if k in ['words', 'lemmas']:
                     if token[split_pt].lower() != split_char.lower():
                         raise ValueError("Incorrect split of %s" % split_word)
-                    sentence_parts[k][tok_idx] = token[split_pt+1:]
-                    sentence_parts[k].insert(tok_idx, token[:split_pt])
+                    sentence_parts[k][tok_idx] = token[rsplit_pt:]
+                    sentence_parts[k].insert(tok_idx, token[:lsplit_pt])
 
                 elif k == 'char_offsets':
-                    sentence_parts[k][tok_idx] = token + split_pt + 1
+                    sentence_parts[k][tok_idx] = token + rsplit_pt
                     sentence_parts[k].insert(tok_idx, token)
 
                 # Otherwise, just duplicate the split token's value
@@ -131,11 +135,14 @@ class PubtatorSentenceParser(SentenceParser):
 
                     # Handle cases where we don't match the start token
                     else:
+                        
+                        abs_offsets_pre = [ao for ao in abs_offsets]
+
                         wi = 0
                         while wi < len(abs_offsets) and abs_offsets[wi+1] < si:
                             wi += 1
                         words = [sentence_parts['words'][j] for j in range(wi, we)]
-                        self._split_token(sentence_parts, abs_offsets, wi, si-1, mention, words)
+                        self._split_token(sentence_parts, abs_offsets, wi, si-1, mention, words, left_tok=False)
 
                         # Register and confirm match
                         wi   += 1
@@ -144,6 +151,10 @@ class PubtatorSentenceParser(SentenceParser):
                             matched_annos.append(i)
                             self._mark_matched_annotation(wi, we, sentence_parts, cid, cid_type)
                         else:
+                            print '\r', wi, we
+                            print abs_offsets_pre
+                            print abs_offsets
+                            print si
                             self._throw_error(sentence_parts, mention, words)
             yield Sentence(**sentence_parts)
 
@@ -159,9 +170,9 @@ class PubtatorSentenceParser(SentenceParser):
 
 
 class PubtatorDocParser(UDF):
-    def __init__(self, x_queue=None, y_set=None):
-        UDF.__init__(self, x_queue, y_set)
-        self.sent_parser = PubtatorSentenceParser()
+    def __init__(self, x_queue=None, y_queue=None):
+        UDF.__init__(self, x_queue, y_queue)
+        self.sent_parser = PubtatorSentenceParser(disable_ptb=True)
 
     def apply(self, lines):
         

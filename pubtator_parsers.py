@@ -1,4 +1,4 @@
-from snorkel.parser import SentenceParser, DocParser
+from snorkel.parser import SentenceParser, DocParser, CoreNLPHandler
 from snorkel.models import Corpus, Sentence, Document, split_stable_id
 from snorkel.udf import UDF
 import re
@@ -9,6 +9,8 @@ STD_SPLITS_RGX = r'[\s\t\-\/\.]*'
 
 class PubtatorSentenceParser(SentenceParser):
     """Subs in Pubtator annotations in the NER_tags array"""
+    def __init__(self):
+        self.corenlp_handler = CoreNLPHandler(tok_whitespace=False, disable_ptb=True, annotators=['pos', 'lemma', 'depparse'])
 
     def _scrub(self, mention):
         m = re.sub(r'\'\'|``', '"', mention)
@@ -105,7 +107,7 @@ class PubtatorSentenceParser(SentenceParser):
                     # We assume mentions are contained within a single sentence, otherwise we skip
                     # NOTE: This is the one type of annotation we do *not* include!
                     if ei > end + 1:
-                        print "\rSkipping cross-sentence mention %s\n" % mention
+                        #print "\rSkipping cross-sentence mention %s\n" % mention
                         matched_annos.append(i)
                         continue
                     
@@ -176,7 +178,7 @@ class PubtatorSentenceParser(SentenceParser):
 class PubtatorDocParser(UDF):
     def __init__(self, x_queue=None, y_queue=None):
         UDF.__init__(self, x_queue, y_queue)
-        self.sent_parser = PubtatorSentenceParser(disable_ptb=True)
+        self.sent_parser = PubtatorSentenceParser()
 
     def apply(self, lines):
         

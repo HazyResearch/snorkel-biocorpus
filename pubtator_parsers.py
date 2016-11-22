@@ -17,13 +17,13 @@ class PubtatorSentenceParser(SentenceParser):
 
     def _check_match(self, mention, toks):
         """Check if a string mention matches a list of tokens, without knowledge of token splits"""
-        return re.match(STD_SPLITS_RGX.join(re.escape(self._scrub(t)) for t in toks) + r'$', self._scrub(mention)) is not None
+        return re.match(STD_SPLITS_RGX.join(re.escape(self._scrub(t)) for t in toks) + STD_SPLITS_RGX + r'$', self._scrub(mention)) is not None
     
     def _throw_error(self, sentence_parts, mention, toks, msg="Couldn't find match!"):
         print "\n"
         print sentence_parts
-        print mention
-        print ' '.join(toks)
+        print "Annotation: '%s'" % mention
+        print "Tagged: '%s'" % ' '.join(toks)
         raise ValueError(msg)
 
     def _mark_matched_annotation(self, wi, we, sentence_parts, cid, cid_type):
@@ -98,64 +98,62 @@ class PubtatorSentenceParser(SentenceParser):
                 si = int(s)
                 ei = int(e)
 
-                # Get absolute char offsets, i.e. relative to document start
-                # Note: this needs to be re-calculated each time in case we split the sentence!
-                abs_offsets = [co + start for co in sentence_parts['char_offsets']]
+                # Consider annotations that are in this sentence
+                if si >= start and si < end:
 
-                # Assume if an annotation starts in one sentence, it also ends in that sentence
-                if si >= abs_offsets[0] and si <= abs_offsets[-1]:
+                    # We assume mentions are contained within a single sentence, otherwise we skip
+                    # NOTE: This is the one type of annotation we do *not* include!
+                    if ei > end:
+                        print "\rSkipping cross-sentence mention %s\n" % mention
+                        matched_annos.append(i)
+                        continue
                     
+                    # Get absolute char offsets, i.e. relative to document start
+                    # Note: this needs to be re-calculated each time in case we split the sentence!
+                    abs_offsets = [co + start for co in sentence_parts['char_offsets']]
+
                     # Get closest end match; note we assume that the end of the tagged span may be
                     # *shorter* than the end of a token
                     we = 0
                     while we < len(abs_offsets) and abs_offsets[we] < ei:
                         we += 1
 
-                    # Handle cases where we exact match the start token
-                    if si in abs_offsets:
-                        wi    = abs_offsets.index(si)
-                        words = [sentence_parts['words'][j] for j in range(wi, we)]
-
-                        # Full exact match
-                        if self._check_match(mention, words):
-                            matched_annos.append(i)
-                            self._mark_matched_annotation(wi, we, sentence_parts, cid, cid_type)
-
-                        # Truncated ending
-                        else:
-                            self._split_token(sentence_parts, abs_offsets, we-1, ei, mention, words)
-
-                            # Register and confirm match
-                            words = [sentence_parts['words'][j] for j in range(wi, we)]
-                            if self._check_match(mention, words):
-                                matched_annos.append(i)
-                                self._mark_matched_annotation(wi, we, sentence_parts, cid, cid_type)
-                            else:
-                                self._throw_error(sentence_parts, mention, words)
-
-                    # Handle cases where we don't match the start token
-                    else:
-                        
-                        abs_offsets_pre = [ao for ao in abs_offsets]
-
+                    # Handle cases where we *do not* match the start token first by splitting start token
+                    if si not in abs_offsets:
                         wi = 0
                         while wi < len(abs_offsets) and abs_offsets[wi+1] < si:
                             wi += 1
                         words = [sentence_parts['words'][j] for j in range(wi, we)]
+
+                        # Split the start token
                         self._split_token(sentence_parts, abs_offsets, wi, si-1, mention, words, left_tok=False)
 
+                        # Adjust abs_offsets, wi and we appropriately
+                        abs_offsets = [co + start for co in sentence_parts['char_offsets']]
+                        wi         += 1
+                        we         += 1
+
+                    wi    = abs_offsets.index(si)
+                    words = [sentence_parts['words'][j] for j in range(wi, we)]
+
+                    # Full exact match- mark and continue
+                    if self._check_match(mention, words):
+                        matched_annos.append(i)
+                        self._mark_matched_annotation(wi, we, sentence_parts, cid, cid_type)
+                        continue
+
+                    # Truncated ending
+                    else:
+                        self._split_token(sentence_parts, abs_offsets, we-1, ei, mention, words)
+
                         # Register and confirm match
-                        wi   += 1
                         words = [sentence_parts['words'][j] for j in range(wi, we)]
                         if self._check_match(mention, words):
                             matched_annos.append(i)
                             self._mark_matched_annotation(wi, we, sentence_parts, cid, cid_type)
                         else:
-                            print '\r', wi, we
-                            print abs_offsets_pre
-                            print abs_offsets
-                            print si
                             self._throw_error(sentence_parts, mention, words)
+
             yield Sentence(**sentence_parts)
 
         # Check if we got everything
@@ -165,7 +163,6 @@ class PubtatorSentenceParser(SentenceParser):
             print "\n"
             for i in set(range(len(annotations))).difference(matched_annos):
                 print annotations[i]
-            print "\n"
             self._throw_error(sentence_parts, mention, words, msg="Annotations missed!")
 
 

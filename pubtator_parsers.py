@@ -28,7 +28,7 @@ class PubtatorSentenceParser(SentenceParser):
 
     def _mark_matched_annotation(self, wi, we, sentence_parts, cid, cid_type):
         for j in range(wi, we):
-            if sentence_parts['entity_cids'][j] is None:
+            if sentence_parts['entity_cids'][j] == 'O':
                 sentence_parts['entity_cids'][j]  = cid
                 sentence_parts['entity_types'][j] = cid_type
             
@@ -163,7 +163,7 @@ class PubtatorSentenceParser(SentenceParser):
             print "\n"
             for i in set(range(len(annotations))).difference(matched_annos):
                 print annotations[i]
-            self._throw_error(sentence_parts, mention, words, msg="Annotations missed!")
+            raise Exception("Annotations missed!")
 
 
 class PubtatorDocParser(UDF):

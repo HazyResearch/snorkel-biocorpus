@@ -84,11 +84,12 @@ class PubtatorSentenceParser(SentenceParser):
     def parse(self, doc, text, annotations):
         
         # Track how many annotations are correctly matches
+        sents         = []
         matched_annos = []
 
         # Parse the document, iterating over dictionary-form Sentences
         for sentence_parts in self.corenlp_handler.parse(doc, text):
-            _, _, start, end  = split_stable_id(sentence_parts['stable_id'])
+            _, _, start, end = split_stable_id(sentence_parts['stable_id'])
 
             # Try to match with annotations
             # If we don't get a start / end match, AND there is a split character between, we split the
@@ -103,7 +104,7 @@ class PubtatorSentenceParser(SentenceParser):
 
                     # We assume mentions are contained within a single sentence, otherwise we skip
                     # NOTE: This is the one type of annotation we do *not* include!
-                    if ei > end:
+                    if ei > end + 1:
                         print "\rSkipping cross-sentence mention %s\n" % mention
                         matched_annos.append(i)
                         continue
@@ -154,7 +155,9 @@ class PubtatorSentenceParser(SentenceParser):
                         else:
                             self._throw_error(sentence_parts, mention, words)
 
-            yield Sentence(**sentence_parts)
+            s =  Sentence(**sentence_parts)
+            sents.append(s)
+            yield s
 
         # Check if we got everything
         if len(annotations) != len(matched_annos):
@@ -163,6 +166,10 @@ class PubtatorSentenceParser(SentenceParser):
             print "\n"
             for i in set(range(len(annotations))).difference(matched_annos):
                 print annotations[i]
+            print "\n"
+            for sent in sents:
+                print sent.stable_id, sent.words, sent.char_offsets
+                print "\n"
             raise Exception("Annotations missed!")
 
 
@@ -193,11 +200,22 @@ class PubtatorDocParser(UDF):
             anno = line.rstrip('\n').rstrip('\r').split('\t')
             if anno[3] == 'NO ABSTRACT':
                 continue
-
-            # Handle cases where no CID is provided...
             else:
+
+                # Handle cases where no CID is provided...
                 if len(anno) == 5:
                     anno.append("")
+
+                # Handle leading / trailing whitespace
+                if anno[3].lstrip() != anno[3]:
+                    d = len(anno[3]) - len(anno[3].lstrip())
+                    anno[1] = int(anno[1]) + d
+                    anno[3] = anno[3].lstrip()
+
+                if anno[3].rstrip() != anno[3]:
+                    d = len(anno[3]) - len(anno[3].rstrip())
+                    anno[2] = int(anno[2]) - d
+                    anno[3] = anno[3].rstrip()
                 annos.append(anno)
 
         # Form a Document

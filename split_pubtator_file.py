@@ -7,7 +7,7 @@ if __name__ == '__main__':
     try:
         fp = sys.argv[1]
         nd = int(sys.argv[2])
-        ns = int(sys.argv[3])
+        ns = int(sys.argv[3]) if len(sys.argv) > 3 else None
 
         # Create directory for the splits
         SPLIT_DIR = "%s.splits_%s/" % (fp, nd)
@@ -15,7 +15,8 @@ if __name__ == '__main__':
             shutil.rmtree(SPLIT_DIR)
         else:
             os.makedirs(SPLIT_DIR)
-        print "Splitting %s into %s splits of %s docs each, saving splits in %s" % (fp, ns, nd, SPLIT_DIR)
+        ns_print = ns if ns else ""
+        print "Splitting %s into %s splits of %s docs each, saving splits in %s" % (fp, ns_print, nd, SPLIT_DIR)
     except:
         print "USAGE: python split_pubtator_file.py FPATH NDOCS_PER_SPLIT MAX_SPLITS"
         sys.exit(1)
@@ -31,7 +32,7 @@ if __name__ == '__main__':
                 if d % nd == 0:
                     f_out.close()
                     s += 1
-                    if s < ns:
+                    if ns is None or s < ns:
                         f_out = open(SPLIT_DIR + 'split_%s' % s, 'wb')
                     else:
                         break

@@ -18,7 +18,7 @@ We will be adding more soon!
 * Mutations (via [tmVar](http://www.ncbi.nlm.nih.gov/CBBresearch/Lu/pub/tmVar/))
 
 
-## Running
+## Rerunning
 To download the main PubTator file (10GB compressed; 32GB raw):
 ```
 ftp ftp.ncbi.nlm.nih.gov
@@ -28,6 +28,20 @@ ftp ftp.ncbi.nlm.nih.gov
 > quit
 
 gunzip -k bioconcepts2pubtator_offsets.gz
+rm bioconcepts2pubtator_offsets.gz
+mkdir data
+mv bioconcepts2pubtator_offsets data/.
+```
+
+Next, we split this file into several chunks for convenience:
+```
+python split_pubtator_file.py data/bioconcepts2pubtator_offsets N_DOCS_PER_SPLIT [MAX_SPLITS]
+```
+where we used `N_DOCS_PER_SPLIT=500000`.
+
+Finally, run the parsing in parallel:
+```
+python parse_pubtator_file.py data/bioconcepts2pubtator_offsets.splits_500000/ postgres:///snorkel-biocorpus PARALLELISM 1> log1.txt 2> log2.txt
 ```
 
 ## API Access

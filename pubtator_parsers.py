@@ -9,7 +9,8 @@ STD_SPLITS_RGX = r'[\s\t\-\/\.]*'
 
 class PubtatorSentenceParser(SentenceParser):
     """Subs in Pubtator annotations in the NER_tags array"""
-    def __init__(self):
+    def __init__(self, stop_on_err=True):
+        self.stop_on_err     = stop_on_err
         self.corenlp_handler = CoreNLPHandler(tok_whitespace=False, disable_ptb=True, annotators=['pos', 'lemma', 'depparse'])
 
     def _scrub(self, mention):
@@ -22,11 +23,13 @@ class PubtatorSentenceParser(SentenceParser):
         return re.match(STD_SPLITS_RGX.join(re.escape(self._scrub(t)) for t in toks) + STD_SPLITS_RGX + r'$', self._scrub(mention)) is not None
     
     def _throw_error(self, sentence_parts, mention, toks, msg="Couldn't find match!"):
-        print "\n"
         print sentence_parts
-        print "Annotation: '%s'" % mention
-        print "Tagged: '%s'" % ' '.join(toks)
-        raise ValueError(msg)
+        print "Annotation:\t'%s'" % mention
+        print "Tagged:\t'%s'" % ' '.join(toks)
+        if self.stop_on_err:
+            raise ValueError(msg)
+        else:
+            print 'WARNING:', msg
 
     def _mark_matched_annotation(self, wi, we, sentence_parts, cid, cid_type):
         for j in range(wi, we):
@@ -45,15 +48,9 @@ class PubtatorSentenceParser(SentenceParser):
         Note that this may not result in a correct pos tag split, and dep tree will no longer be a tree...
         If target_left=True, then do not include the split character with the left split; vice versa for False
         """
-        try:
-            split_word = sentence_parts['words'][tok_idx]
-            split_pt   = char_idx - abs_offsets[tok_idx]
-            split_char = split_word[split_pt]
-        except IndexError:
-            print "\r"
-            print split_word
-            print split_pt
-            self._throw_error(sentence_parts, mention, toks)
+        split_word = sentence_parts['words'][tok_idx]
+        split_pt   = char_idx - abs_offsets[tok_idx]
+        split_char = split_word[split_pt]
 
         # Decide whether to preserve split or not...
         keep_split = re.match(STD_SPLITS_RGX + r'$', split_char) is None
@@ -113,7 +110,7 @@ class PubtatorSentenceParser(SentenceParser):
                     # We assume mentions are contained within a single sentence, otherwise we skip
                     # NOTE: This is the one type of annotation we do *not* include!
                     if ei > end + 1:
-                        #print "\rSkipping cross-sentence mention %s\n" % mention
+                        print "Skipping cross-sentence mention '%s'" % mention
                         matched_annos.append(i)
                         continue
                     
@@ -135,7 +132,12 @@ class PubtatorSentenceParser(SentenceParser):
                         words = [sentence_parts['words'][j] for j in range(wi, we)]
 
                         # Split the start token
-                        self._split_token(sentence_parts, abs_offsets, wi, si-1, mention, words, left_tok=False)
+                        try:
+                            self._split_token(sentence_parts,abs_offsets,wi,si-1, mention, words, left_tok=False)
+                        except IndexError:
+                            self._throw_error(sentence_parts, mention, words, msg="Token split error")
+                            matched_annos.append(i)
+                            continue
 
                         # Adjust abs_offsets, wi and we appropriately
                         abs_offsets = [co + start for co in sentence_parts['char_offsets']]
@@ -153,7 +155,12 @@ class PubtatorSentenceParser(SentenceParser):
 
                     # Truncated ending
                     else:
-                        self._split_token(sentence_parts, abs_offsets, we-1, ei, mention, words)
+                        try:
+                            self._split_token(sentence_parts, abs_offsets, we-1, ei, mention, words)
+                        except IndexError:
+                            self._throw_error(sentence_parts, mention, words, msg="Token split error")
+                            matched_annos.append(i)
+                            continue
 
                         # Register and confirm match
                         words = [sentence_parts['words'][j] for j in range(wi, we)]
@@ -162,6 +169,8 @@ class PubtatorSentenceParser(SentenceParser):
                             self._mark_matched_annotation(wi, we, sentence_parts, cid, cid_type)
                         else:
                             self._throw_error(sentence_parts, mention, words)
+                            matched_annos.append(i)
+                            continue
 
             s =  Sentence(**sentence_parts)
             sents.append(s)
@@ -169,7 +178,9 @@ class PubtatorSentenceParser(SentenceParser):
 
         # Check if we got everything
         if len(annotations) != len(matched_annos):
+            print "Annotations:"
             print annotations
+            print "Matched annotations:"
             print matched_annos
             print "\n"
             for i in set(range(len(annotations))).difference(matched_annos):
@@ -178,13 +189,16 @@ class PubtatorSentenceParser(SentenceParser):
             for sent in sents:
                 print sent.stable_id, sent.words, sent.char_offsets
                 print "\n"
-            raise Exception("Annotations missed!")
+            if self.stop_on_err:
+                raise Exception("Annotations missed!")
+            else:
+                print "WARNING: Annotations missed!"
 
 
 class PubtatorDocParser(UDF):
-    def __init__(self, x_queue=None, y_queue=None):
+    def __init__(self, x_queue=None, y_queue=None, stop_on_err=True):
         UDF.__init__(self, x_queue, y_queue)
-        self.sent_parser = PubtatorSentenceParser()
+        self.sent_parser = PubtatorSentenceParser(stop_on_err=stop_on_err)
 
     def apply(self, lines):
         

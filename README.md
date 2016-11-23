@@ -41,6 +41,7 @@ where we used `N_DOCS_PER_SPLIT=500000`.
 
 Finally, run the parsing in parallel:
 ```
+source set_env.sh
 python parse_pubtator_file.py data/bioconcepts2pubtator_offsets.splits_500000/ postgres:///snorkel-biocorpus PARALLELISM 1> log1.txt 2> log2.txt
 ```
 

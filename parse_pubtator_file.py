@@ -25,7 +25,7 @@ if __name__ == '__main__':
         print "Parsing %s..." % fp
         t1            = time()
         doc_generator = pubtator_doc_generator(fp)
-        corpus_parser = UDFRunnerMP(PubtatorDocParser)
+        corpus_parser = UDFRunnerMP(PubtatorDocParser, stop_on_err=False)
         corpus_parser.run(doc_generator, parallelism=int(sys.argv[3]))
         session.commit()
         print "Done in %s." % (time() - t1,)

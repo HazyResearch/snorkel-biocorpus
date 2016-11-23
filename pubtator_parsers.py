@@ -70,10 +70,16 @@ class PubtatorSentenceParser(SentenceParser):
                 # Note that we're assuming (anc checking) that lemmatization does not
                 # affect the split point
                 if k in ['words', 'lemmas']:
-                    if token[split_pt].lower() != split_char.lower():
-                        raise ValueError("Incorrect split of %s" % split_word)
-                    sentence_parts[k][tok_idx] = token[rsplit_pt:]
-                    sentence_parts[k].insert(tok_idx, token[:lsplit_pt])
+
+                    # Note: don't enforce splitting for lemmas if index is not in range
+                    # Essentially, this boils down to assuming that the split will either be correct,
+                    # or lemmatization will have chopped the split portion off already
+                    if k == 'lemmas' and split_pt > len(token):
+                        sentence_parts[k][tok_idx] = ''
+                        sentence_parts[k].insert(tok_idx, token)
+                    else:
+                        sentence_parts[k][tok_idx] = token[rsplit_pt:]
+                        sentence_parts[k].insert(tok_idx, token[:lsplit_pt])
 
                 elif k == 'char_offsets':
                     sentence_parts[k][tok_idx] = token + rsplit_pt

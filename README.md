@@ -3,9 +3,13 @@
 Initially this is just a pre-processed, Snorkel-format dump of [PubTator](https://www.ncbi.nlm.nih.gov/CBBresearch/Lu/Demo/PubTator/);
 We will be adding more soon!
 
-## Current contents
+## Data
 
-*Location: raiders7:/lfs/local/0/ajratner/snorkel-biocorpus/data/*
+Current postgres dump (142GB):
+* `raiders7:/lfs/local/0/ajratner/snorkel-biocorpus/data/snorkel_biocorpus.sql`
+* `/dfs/scratch0/ajratner/snorkel-biocorpus/snorkel_biocorpus.sql`
+
+To reload, just use `psql snorkel-biocorpus < snorkel_biocorpus.sql`.
 
 ### Sources
 * PubMed abstracts

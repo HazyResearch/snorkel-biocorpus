@@ -24,17 +24,11 @@ To reload, just use `psql snorkel-biocorpus < snorkel_biocorpus.sql`.
 
 ## Rerunning
 To download the main PubTator file (10GB compressed; 32GB raw):
-```
-ftp ftp.ncbi.nlm.nih.gov
-> pass
-> cd pub/lu/PubTator
-> get bioconcepts2pubtator_offsets.gz
-> quit
 
-gunzip -k bioconcepts2pubtator_offsets.gz
-rm bioconcepts2pubtator_offsets.gz
-mkdir data
-mv bioconcepts2pubtator_offsets data/.
+```sh
+mkdir -p data
+curl ftp://ftp.ncbi.nlm.nih.gov/pub/lu/PubTator/bioconcepts2pubtator_offsets.gz |
+  gunzip > data/bioconcepts2pubtator_offsets
 ```
 
 Next, we split this file into several chunks for convenience:

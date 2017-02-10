@@ -1,7 +1,30 @@
 from snorkel.parser import SentenceParser, DocParser, CoreNLPHandler
-from snorkel.models import Corpus, Sentence, Document, split_stable_id
-from snorkel.udf import UDF
+from snorkel.models import Context, Candidate, Sentence, Document, split_stable_id
+from snorkel.udf import UDF, UDFRunner
 import re
+
+
+class PubTatorCorpusParser(UDFRunner):
+    def __init__(self):
+        super(PubTatorCorpusParser, self).__init__(PubTatorCorpusParserUDF)
+
+    def clear(self, session, **kwargs):
+        session.query(Context).delete()
+        
+        # We cannot cascade up from child contexts to parent Candidates, so we delete all Candidates too
+        session.query(Candidate).delete()
+
+
+class PubTatorCorpusParserUDF(UDF):
+    def __init__(self, stop_on_err=True, **kwargs):
+        self.sentence_parser = PubtatorSentenceParser(stop_on_err=stop_on_err)
+        super(PubTatorCorpusParserUDF, self).__init__(**kwargs)
+
+    def apply(self, x, **kwargs):
+        """Given a Document object, its raw text, and PubTator annotations, parse into processed Sentences"""
+        doc, text, annos = x
+        for s in self.sentence_parser.parse(doc, text, annos):
+            yield s
 
 
 ENTITY_SEP     = '~@~'
@@ -172,9 +195,7 @@ class PubtatorSentenceParser(SentenceParser):
                             matched_annos.append(i)
                             continue
 
-            s =  Sentence(**sentence_parts)
-            sents.append(s)
-            yield s
+            yield Sentence(**sentence_parts)
 
         # Check if we got everything
         if len(annotations) != len(matched_annos):
@@ -195,12 +216,24 @@ class PubtatorSentenceParser(SentenceParser):
                 print "WARNING: Annotations missed!"
 
 
-class PubtatorDocParser(UDF):
-    def __init__(self, x_queue=None, y_queue=None, stop_on_err=True):
-        UDF.__init__(self, x_queue, y_queue)
-        self.sent_parser = PubtatorSentenceParser(stop_on_err=stop_on_err)
+class PubtatorDocPreprocessor(object):
+    """Given a file path, parses the file into a set of Documents, with associated text *and PubTator annotations*."""
+    def __init__(self, path):
+        self.path = path
 
-    def apply(self, lines):
+    def generate(self):
+        with open(self.path, 'rb') as f: 
+            lines = []
+            for line in f:
+                if len(line.rstrip()) == 0:
+                    if len(lines) > 0:
+                        doc, text, annos = self.parse_lines(lines)
+                        yield doc, text, annos
+                        lines = []
+                else:
+                    lines.append(line)
+
+    def parse_lines(self, lines):
         
         # Here, lines are the lines of a PubTator-format file corresponding to on one document
         # + its annotations
@@ -243,21 +276,5 @@ class PubtatorDocParser(UDF):
         # Form a Document
         doc = Document(name=doc_id, stable_id=stable_id)
 
-        # Parse the sentences
-        for _ in self.sent_parser.parse(doc, text, annos):
-            pass
-
-        # Return the doc
-        yield doc
-
-
-def pubtator_doc_generator(fp):
-    with open(fp, 'rb') as f: 
-        lines = []
-        for line in f:
-            if len(line.rstrip()) == 0:
-                if len(lines) > 0:
-                    yield lines
-                    lines = []
-            else:
-                lines.append(line)
+        # Return the doc, text, and annotations
+        return doc, text, annos

@@ -1,7 +1,12 @@
-export APPHOME="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && cd .. && pwd )"
+export APPHOME="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 export SNORKELHOME="$APPHOME/snorkel"
-echo "Application home directory: $APPHOME"
-echo "Snorkel home directory: $SNORKELHOME"
-export PYTHONPATH="$PYTHONPATH:$APPHOME:$SNORKELHOME:$SNORKELHOME/treedlib"
-export PATH="$PATH:$SNORKELHOME:$SNORKELHOME/treedlib"
+export DDBIOLIBHOME="$APPHOME/ddbiolib"
+
+echo "app home directory: $APPHOME"
+echo "ddbiolib home directory: $DDBIOLIBHOME"
+echo "snorkel home directory: $SNORKELHOME"
+
+export PYTHONPATH="$PYTHONPATH:$APPHOME:$SNORKELHOME:$DDBIOLIBHOME:$SNORKELHOME/treedlib"
+export PATH="$PATH:$APPHOME:$SNORKELHOME:$DDBIOLIBHOME:$SNORKELHOME/treedlib"
+echo "$PYTHONPATH"
 echo "Environment variables set!"

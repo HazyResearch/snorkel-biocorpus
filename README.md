@@ -1,18 +1,21 @@
-# Snorkel BioCoprus
+# Snorkel BioCorpus
 
-Initially this is just a pre-processed, Snorkel-format dump of [PubTator](https://www.ncbi.nlm.nih.gov/CBBresearch/Lu/Demo/PubTator/);
+Initially this is just a pre-processed, Snorkel-format dump of [PubTator](https://www.ncbi.nlm.nih.gov/CBBresearch/Lu/Demo/PubTator/). 
 We will be adding more soon!
 
-## Data
+## Database Snapshot
 
-Current postgres dump (142GB):
-* `raiders7:/lfs/local/0/ajratner/snorkel-biocorpus/data/snorkel_biocorpus.sql`
-* `/dfs/scratch0/ajratner/snorkel-biocorpus/snorkel_biocorpus.sql`
+The easiest way to get started is to download a preprocessed Snorkel PostgreSQL database dump. This is a 142 GB file and is ready to use directly with Snorkel. 
 
-To reload, just use `psql snorkel-biocorpus < snorkel_biocorpus.sql`.
+To reload, just use `psql snorkel-biocorpus < snorkel_biocorpus.sql`
 
 ### Sources
 * PubMed abstracts
+
+### Summary Statistics
+
+XXX PubMed Abstracts  
+XXX 19XX - 2017
 
 ### Entity Tags
 * Genes (via [GNormPlus](http://www.ncbi.nlm.nih.gov/CBBresearch/Lu/Demo/GNormPlus/))
@@ -22,32 +25,15 @@ To reload, just use `psql snorkel-biocorpus < snorkel_biocorpus.sql`.
 * Mutations (via [tmVar](http://www.ncbi.nlm.nih.gov/CBBresearch/Lu/pub/tmVar/))
 
 
-## Rerunning
-To download the main PubTator file (10GB compressed; 32GB raw):
-```
-ftp ftp.ncbi.nlm.nih.gov
-> pass
-> cd pub/lu/PubTator
-> get bioconcepts2pubtator_offsets.gz
-> quit
+## Rebuilding the Database
+You can rebuild the entire PubTator database from scratch as follows:
 
-gunzip -k bioconcepts2pubtator_offsets.gz
-rm bioconcepts2pubtator_offsets.gz
-mkdir data
-mv bioconcepts2pubtator_offsets data/.
-```
+run `install.sh`
 
-Next, we split this file into several chunks for convenience:
-```
-python split_pubtator_file.py data/bioconcepts2pubtator_offsets N_DOCS_PER_SPLIT [MAX_SPLITS]
-```
-where we used `N_DOCS_PER_SPLIT=500000`.
+This will download the current PubTator snapshot (~10GB compressed; 32GB raw) from `ftp.ncbi.nlm.nih.gov`
 
-Finally, run the parsing in parallel:
-```
-source set_env.sh
-python parse_pubtator_file.py data/bioconcepts2pubtator_offsets.splits_500000/ postgres:///snorkel-biocorpus PARALLELISM 1> log1.txt 2> log2.txt
-```
+Parsing using 16 cores with the [spaCy]() parser takes around XX hours. Parsing with CoreNLP will take longer. 
+
 
 ## API Access
 To get annotations for specific PubMed abstracts, by PMID, simple API access is supported by the NCBI (see [here](https://www.ncbi.nlm.nih.gov/CBBresearch/Lu/Demo/tmTools/#RESTfulIntroduction)):

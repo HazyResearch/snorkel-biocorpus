@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 
+# configure this for your specific machine
 NUM_PROCS=16
 
-INIT_DB=true
+INIT_DB=false
 DB_HOST="localhost"
 DB_NAME="biocorpus"
-DB_PORT=5432
+DB_PORT=4554
 
 #
 # Download Snorkel
@@ -51,4 +52,5 @@ fi
 #
 # ETL script: split dataset into blocks, parse, then load into database
 #
+echp "Generating PostgreSQL database: ${DB_CONN}"
 source set_env.sh python parse_pubtator.py --input_file data/bioconcepts2pubtator_offsets --dbname "${DB_CONN}" -n "${NUM_PROCS}" > biocorpus.log 2> biocorpus.err

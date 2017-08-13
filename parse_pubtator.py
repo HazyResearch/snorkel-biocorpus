@@ -72,7 +72,7 @@ def main(args):
     start_ts = time()
     for fp in filelist:
         doc_preprocessor = PubTatorDocPreprocessor(fp)
-        corpus_parser = CorpusParser(parser=PubTatorParser())
+        corpus_parser = CorpusParser(parser=PubTatorParser(stop_on_err=False))
         corpus_parser.apply(doc_preprocessor, parallelism=args.num_procs)
         end_ts = time()
         print "Split completed in [%s]" % (time() - end_ts,)
@@ -83,14 +83,14 @@ def main(args):
 if __name__ == '__main__':
 
     argparser = argparse.ArgumentParser()
-    argparser.add_argument("-d", "--dbname", type=str, default="biocorpus", help="SNORKELHOME enviorn variable")
+    argparser.add_argument("-d", "--dbname", type=str, default="postgresql:///biocorpus", help="SNORKELDB enviorn variable")
     argparser.add_argument("-i", "--input_file", type=str, default="data/bioconcepts2pubtator_offsets.sample",
                            help="PubTator snapshot")
     argparser.add_argument("-s", "--split_size", type=int, default=50000, help="Number of documents per split")
     argparser.add_argument("-n", "--num_procs", type=int, default=1, help="Number of processes")
     args = argparser.parse_args()
 
-    os.environ['SNORKELDB'] = args.dbname #"postgresql:///{}".format(args.dbname)
+    os.environ['SNORKELDB'] = args.dbname
 
     from snorkel import SnorkelSession
     from snorkel.parser import CorpusParser

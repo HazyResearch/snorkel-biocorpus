@@ -28,8 +28,7 @@ def split_pubtator_corpus(file_path, split_size=500000):
         SPLIT_DIR = "%s.splits_%s/" % (fp, nd)
         if os.path.exists(SPLIT_DIR):
             shutil.rmtree(SPLIT_DIR)
-        else:
-            os.makedirs(SPLIT_DIR)
+        os.makedirs(SPLIT_DIR)
         ns_print = ns if ns else ""
         print "Splitting %s into %s splits of %s docs each, saving splits in %s" % (fp, ns_print, nd, SPLIT_DIR)
     except:

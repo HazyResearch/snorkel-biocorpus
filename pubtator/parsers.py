@@ -107,88 +107,92 @@ class PubTatorParser(Parser):
 
         # Parse the document, iterating over dictionary-form Sentences
         for sentence_parts in self.parser.parse(doc, text):
-            _, _, start, end = split_stable_id(sentence_parts['stable_id'])
+            try:
+                _, _, start, end = split_stable_id(sentence_parts['stable_id'])
 
-            # Try to match with annotations
-            # If we don't get a start / end match, AND there is a split character between, we split the
-            # token and *modify the CoreNLP parse* here!
-            for i, anno in enumerate(annotations):
-                _, s, e, mention, cid_type, cid = anno
-                si = int(s)
-                ei = int(e)
+                # Try to match with annotations
+                # If we don't get a start / end match, AND there is a split character between, we split the
+                # token and *modify the CoreNLP parse* here!
+                for i, anno in enumerate(annotations):
+                    _, s, e, mention, cid_type, cid = anno
+                    si = int(s)
+                    ei = int(e)
 
-                # Consider annotations that are in this sentence
-                if si >= start and si < end:
+                    # Consider annotations that are in this sentence
+                    if si >= start and si < end:
 
-                    # We assume mentions are contained within a single sentence, otherwise we skip
-                    # NOTE: This is the one type of annotation we do *not* include!
-                    if ei > end + 1:
-                        print "Skipping cross-sentence mention '%s'" % mention
-                        matched_annos.append(i)
-                        continue
-
-                    # Get absolute char offsets, i.e. relative to document start
-                    # Note: this needs to be re-calculated each time in case we split the sentence!
-                    abs_offsets = [co + start for co in sentence_parts['char_offsets']]
-
-                    # Get closest end match; note we assume that the end of the tagged span may be
-                    # *shorter* than the end of a token
-                    we = 0
-                    while we < len(abs_offsets) and abs_offsets[we] < ei:
-                        we += 1
-
-                    # Handle cases where we *do not* match the start token first by splitting start token
-                    if si not in abs_offsets:
-                        wi = 0
-                        while wi < len(abs_offsets) and abs_offsets[wi + 1] < si:
-                            wi += 1
-                        words = [sentence_parts['words'][j] for j in range(wi, we)]
-
-                        # Split the start token
-                        try:
-                            self._split_token(sentence_parts, abs_offsets, wi, si - 1, mention, words, left_tok=False)
-                        except IndexError:
-                            self._throw_error(sentence_parts, mention, words, msg="Token split error")
+                        # We assume mentions are contained within a single sentence, otherwise we skip
+                        # NOTE: This is the one type of annotation we do *not* include!
+                        if ei > end + 1:
+                            print "Skipping cross-sentence mention '%s'" % mention
                             matched_annos.append(i)
                             continue
 
-                        # Adjust abs_offsets, wi and we appropriately
+                        # Get absolute char offsets, i.e. relative to document start
+                        # Note: this needs to be re-calculated each time in case we split the sentence!
                         abs_offsets = [co + start for co in sentence_parts['char_offsets']]
-                        wi += 1
-                        we += 1
 
-                    wi = abs_offsets.index(si)
-                    words = [sentence_parts['words'][j] for j in range(wi, we)]
+                        # Get closest end match; note we assume that the end of the tagged span may be
+                        # *shorter* than the end of a token
+                        we = 0
+                        while we < len(abs_offsets) and abs_offsets[we] < ei:
+                            we += 1
 
-                    # Full exact match- mark and continue
-                    if self._check_match(mention, words):
-                        matched_annos.append(i)
-                        self._mark_matched_annotation(wi, we, sentence_parts, cid, cid_type)
-                        continue
+                        # Handle cases where we *do not* match the start token first by splitting start token
+                        if si not in abs_offsets:
+                            wi = 0
+                            while wi < len(abs_offsets) and abs_offsets[wi + 1] < si:
+                                wi += 1
+                            words = [sentence_parts['words'][j] for j in range(wi, we)]
 
-                    # Truncated ending
-                    else:
-                        try:
-                            self._split_token(sentence_parts, abs_offsets, we - 1, ei, mention, words)
-                        except IndexError:
-                            self._throw_error(sentence_parts, mention, words, msg="Token split error")
-                            matched_annos.append(i)
-                            continue
+                            # Split the start token
+                            try:
+                                self._split_token(sentence_parts, abs_offsets, wi, si - 1, mention, words, left_tok=False)
+                            except IndexError:
+                                self._throw_error(sentence_parts, mention, words, msg="Token split error")
+                                matched_annos.append(i)
+                                continue
 
-                        # Register and confirm match
+                            # Adjust abs_offsets, wi and we appropriately
+                            abs_offsets = [co + start for co in sentence_parts['char_offsets']]
+                            wi += 1
+                            we += 1
+
+                        wi = abs_offsets.index(si)
                         words = [sentence_parts['words'][j] for j in range(wi, we)]
+
+                        # Full exact match- mark and continue
                         if self._check_match(mention, words):
                             matched_annos.append(i)
                             self._mark_matched_annotation(wi, we, sentence_parts, cid, cid_type)
-                        else:
-                            self._throw_error(sentence_parts, mention, words)
-                            matched_annos.append(i)
                             continue
 
-            yield sentence_parts
+                        # Truncated ending
+                        else:
+                            try:
+                                self._split_token(sentence_parts, abs_offsets, we - 1, ei, mention, words)
+                            except IndexError:
+                                self._throw_error(sentence_parts, mention, words, msg="Token split error")
+                                matched_annos.append(i)
+                                continue
 
-            # s =  Sentence(**sentence_parts)
-            sents.append(sentence_parts)
+                            # Register and confirm match
+                            words = [sentence_parts['words'][j] for j in range(wi, we)]
+                            if self._check_match(mention, words):
+                                matched_annos.append(i)
+                                self._mark_matched_annotation(wi, we, sentence_parts, cid, cid_type)
+                            else:
+                                self._throw_error(sentence_parts, mention, words)
+                                matched_annos.append(i)
+                                continue
+
+                yield sentence_parts
+
+                sents.append(sentence_parts)
+
+            except Exception as e:
+                print "WARNING: parsing exception {} in document {}".format(e, doc.name)
+
 
         # Check if we got everything
         if len(annotations) != len(matched_annos):
@@ -201,7 +205,7 @@ class PubTatorParser(Parser):
                 print annotations[i]
             print "\n"
             for sent in sents:
-                print sent.stable_id, sent.words, sent.char_offsets
+                print sent["stable_id"], sent["words"], sent["char_offsets"]
                 print "\n"
             if self.stop_on_err:
                 raise Exception("Annotations missed!")
@@ -211,8 +215,7 @@ class PubTatorParser(Parser):
 
 class PubTatorDocPreprocessor(DocPreprocessor):
     """
-    Load PubTator annotation dump
-    NOTE: This service does *not* include all PubMed abstracts.
+    Load PubTator annotation snapshot
 
     Entity Tags:
 
@@ -231,7 +234,11 @@ class PubTatorDocPreprocessor(DocPreprocessor):
     """
 
     def _pubtator_parser(self, content):
+        """
 
+        :param content:
+        :return:
+        """
         # First line is the title
         split = re.split(r'\|', content[0].rstrip(), maxsplit=2)
         doc_id = int(split[0])
@@ -242,7 +249,7 @@ class PubTatorDocPreprocessor(DocPreprocessor):
         # Second line is the abstract
         # Assume these are newline-separated; is this true?
         # Note: some articles do not have abstracts, however they still have this line
-        doc_text += '\n' + re.split(r'\|', content[1].rstrip(), maxsplit=2)[2]
+        doc_text += ' ' + re.split(r'\|', content[1].rstrip(), maxsplit=2)[2]
 
         # Rest of the lines are annotations
         annos = []
@@ -271,11 +278,11 @@ class PubTatorDocPreprocessor(DocPreprocessor):
         # Form a Document
         doc = Document(
             name=doc_id, stable_id=stable_id,
-            meta={"annotations": annos}
+            meta={}
         )
 
         # Return the doc
-        return doc, doc_text
+        return doc, doc_text, annos
 
     def _doc_generator(self, file_path, encoding="utf-8"):
         """
@@ -302,7 +309,11 @@ class PubTatorDocPreprocessor(DocPreprocessor):
     def parse_file(self, file_path, file_name):
         """
         Parse abstracts
+
+        :param file_path:
+        :param file_name:
+        :return:
         """
         for content in self._doc_generator(file_path, self.encoding):
-            doc, txt = self._pubtator_parser(content)
+            doc, txt, annos = self._pubtator_parser(content)
             yield doc, txt

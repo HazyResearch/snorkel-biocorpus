@@ -67,12 +67,19 @@ def main(args):
     # ---------------------------------------
     filelist = glob.glob("{}.splits_{}/*".format(args.input_file,args.split_size))
 
+    pubtator_tags = PubTatorTagProcessor()
+
     # Iterate through the splits
     start_ts = time()
     for fp in filelist:
         doc_preprocessor = PubTatorDocPreprocessor(fp)
-        corpus_parser = CorpusParser(parser=PubTatorParser(stop_on_err=False))
-        corpus_parser.apply(doc_preprocessor, parallelism=args.num_procs)
+        parser = Spacy() if args.parser == "spacy" else StanfordCoreNLPServer()
+        corpus_parser = CorpusParser(parser=parser)
+        corpus_parser.apply(doc_preprocessor, parallelism=args.num_procs, clear=False)
+
+        # load entity tags
+        pubtator_tags.load_data(session, fp)
+
         end_ts = time()
         print "Split completed in [%s]" % (time() - end_ts,)
 
@@ -87,13 +94,16 @@ if __name__ == '__main__':
                            help="PubTator snapshot")
     argparser.add_argument("-s", "--split_size", type=int, default=50000, help="Number of documents per split")
     argparser.add_argument("-n", "--num_procs", type=int, default=1, help="Number of processes")
+    argparser.add_argument("-p", "--parser", action='store', choices=['spacy', 'corenlp'],
+                           default='spacy', help="parser choice")
+
     args = argparser.parse_args()
 
     os.environ['SNORKELDB'] = args.dbname
 
     from snorkel import SnorkelSession
-    from snorkel.parser import CorpusParser
-    from pubtator import PubTatorDocPreprocessor, PubTatorParser
+    from snorkel.parser import CorpusParser, Spacy, StanfordCoreNLPServer
+    from pubtator import PubTatorDocPreprocessor, PubTatorTagProcessor
 
     main(args)
 

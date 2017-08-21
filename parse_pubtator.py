@@ -76,12 +76,12 @@ def main(args):
         parser = Spacy() if args.parser == "spacy" else StanfordCoreNLPServer()
         corpus_parser = CorpusParser(parser=parser)
         corpus_parser.apply(doc_preprocessor, parallelism=args.num_procs, clear=False)
-
-        # load entity tags
-        pubtator_tags.load_data(session, fp)
-
         end_ts = time()
         print "Split completed in [%s]" % (time() - end_ts,)
+
+    for fp in filelist:
+        # load entity tags
+        pubtator_tags.load_data(session, fp)
 
     print "\nDONE in [%s]" % (time() - start_ts,)
 

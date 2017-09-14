@@ -67,8 +67,6 @@ def main(args):
     # ---------------------------------------
     filelist = glob.glob("{}.splits_{}/*".format(args.input_file,args.split_size))
 
-    pubtator_tags = PubTatorTagProcessor()
-
     # Iterate through the splits
     start_ts = time()
     for fp in filelist:
@@ -79,9 +77,10 @@ def main(args):
         end_ts = time()
         print "Split completed in [%s]" % (time() - end_ts,)
 
-    for fp in filelist:
-        # load entity tags
-        pubtator_tags.load_data(session, fp)
+    # pubtator_tags = PubTatorTagProcessor()
+    # for fp in filelist:
+    #     # load entity tags
+    #     pubtator_tags.load_data(session, fp)
 
     print "\nDONE in [%s]" % (time() - start_ts,)
 
@@ -100,6 +99,7 @@ if __name__ == '__main__':
     args = argparser.parse_args()
 
     os.environ['SNORKELDB'] = args.dbname
+    os.environ['TIKA_LOG_PATH'] = "."
 
     from snorkel import SnorkelSession
     from snorkel.parser import CorpusParser, Spacy, StanfordCoreNLPServer

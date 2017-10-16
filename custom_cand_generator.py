@@ -59,7 +59,8 @@ class SequenceTagCandidateExtractorUDF(UDF):
             if position == None and t.abs_char_start >= char_index[-1]:
                 position = len(char_index) - 1
             if position == None:
-                sys.stderr.write("Warning! Cross-sentence mention (skipping...)\n")
+                values = (doc.name, doc.id, t.abs_char_start, t.abs_char_end)
+                sys.stderr.write("Warning! Skipping cross-sentence mention [{}] {} {}:{} \n".format(*values))
                 continue
             try:
                 shift = doc.sentences[position].abs_char_offsets[0]

@@ -1,0 +1,10 @@
+
+Extract-Transform-Load Scripts for Parsing Biomedcial Corpora
+
+Instructions
+./preprocess.sh <INPUT> <OUTPUT>
+
+
+Extract Gold Tag Data
+python extract_annotations.py -i /Users/fries/Desktop/cdr/ -o  /Users/fries/Desktop/
+

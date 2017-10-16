@@ -1,0 +1,52 @@
+<project name="Tokeniser" default="dist" basedir=".">
+  <description>
+    simple build file
+  </description>
+  
+	<!-- edit this -->
+  <!-- set global properties for this build -->
+  <property name="src" location="src"/>
+  <property name="bin" location="bin"/>
+  <property name="doc" location="doc"/>
+	
+	<target name="init">
+    <!-- Create the time stamp -->
+    <tstamp/>
+    <!-- Create the build directory structure used by compile -->
+    <mkdir dir="${bin}"/>
+  </target>
+  
+  <target name="pre" depends="init" description="foo">
+    <copy todir="${bin}">
+  		<fileset dir="${src}" includes="**/resources/**/*.*"/>
+  	</copy>	
+  </target>
+	
+  <target name="compile" depends="init,pre"
+	  description="compile the source " >
+    <javac srcdir="${src}" destdir="${bin}"/>
+  </target>
+  
+  <target name="dist" depends="compile"
+	  description="generate the distribution" >
+  	  	
+  	<jar destfile="chemtok-1.0.1.jar">
+  		<manifest>
+  			<attribute name="Main-Class" value="uk.ac.cam.ch.wwmm.tokeniser.ChemTokeniser"/>
+  		</manifest>
+  		<fileset dir="${bin}"/>
+  	</jar>
+  </target>
+  
+  <target name="javadoc">
+	<javadoc destdir="${doc}" overview="${src}/overview.html">
+  		<fileset dir="${src}"/>
+	</javadoc>
+  </target>
+	
+  <target name="clean"
+	  description="clean up" >
+    <delete dir="${bin}"/>
+	<delete dir="${doc}"/>
+  </target>
+</project>

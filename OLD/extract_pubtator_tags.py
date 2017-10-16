@@ -30,10 +30,12 @@ def main(args):
 
     write_mode = "w"
     pubtator_tags = PubTatorTagProcessor()
+    name2id = dict(session.query(Document.name, Document.id).all())
+
     for fp in filelist:
         # dump all tags to a tab-delimited text file
         if args.dump:
-            tags = pubtator_tags.load_data(session, fp)
+            tags = pubtator_tags.load_data(session, fp, name2id)
             dump2delimited(tags, args.output_file, write_mode)
             # change to append mode after first write
             write_mode = "a"
@@ -63,7 +65,7 @@ if __name__ == '__main__':
     os.environ['TIKA_LOG_PATH'] = "."
 
     from snorkel import SnorkelSession
-    from snorkel.models import SequenceTag
+    from snorkel.models import SequenceTag, Document
     from pubtator import PubTatorTagProcessor
 
     main(args)

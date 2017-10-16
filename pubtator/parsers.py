@@ -232,6 +232,17 @@ class PubTatorDocPreprocessor(DocPreprocessor):
     ftp.ncbi.nlm.nih.gov/pub/lu/PubTator/bioconcepts2pubtator_offsets.gz
 
     """
+    def __init__(self, path, encoding="utf-8", max_docs=float('inf'), filter_id_set=None, annotations=False):
+        """
+
+        :param path:
+        :param encoding:
+        :param max_docs:
+        :param filter_id_set:
+        """
+        super(PubTatorDocPreprocessor,self).__init__(path, encoding="utf-8", max_docs=float('inf'))
+        self.filter_id_set = filter_id_set
+        self.annotations = annotations
 
     def _pubtator_parser(self, content):
         """
@@ -242,6 +253,7 @@ class PubTatorDocPreprocessor(DocPreprocessor):
         # First line is the title
         split = re.split(r'\|', content[0].rstrip(), maxsplit=2)
         doc_id = int(split[0])
+
         stable_id = self.get_stable_id(doc_id)
 
         doc_text = split[2]
@@ -301,7 +313,10 @@ class PubTatorDocPreprocessor(DocPreprocessor):
             for line in fp:
                 if len(line.rstrip()) == 0:
                     if len(lines) > 0:
-                        yield lines
+                        # filter docs to target set
+                        doc_id = re.split(r'\|', lines[0].rstrip(), maxsplit=2)
+                        if not self.filter_id_set or (self.filter_id_set and doc_id in self.filter_id_set):
+                            yield lines
                         lines = []
                 else:
                     lines.append(line)
@@ -316,4 +331,9 @@ class PubTatorDocPreprocessor(DocPreprocessor):
         """
         for content in self._doc_generator(file_path, self.encoding):
             doc, txt, annos = self._pubtator_parser(content)
-            yield doc, txt
+            if self.annotations:
+                yield doc, txt, annos
+            else:
+                yield doc, txt
+
+
